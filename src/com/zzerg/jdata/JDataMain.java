@@ -1,8 +1,10 @@
 package com.zzerg.jdata;
 
 import java.io.*;
-import java.util.ArrayList;
-import java.util.List;
+import java.text.DecimalFormatSymbols;
+import java.text.NumberFormat;
+import java.util.*;
+import java.text.DecimalFormat;
 
 import static java.lang.System.*;
 
@@ -21,34 +23,109 @@ public class JDataMain {
     private static final int MIN_TICKS_START_PEAK = 5;
     private static final int MAX_TICKS_END_PEAK = 3;
     private static final int MIN_PEAK_POWER = 10;
+    private static final String CSV_SEPARATOR = ";";
 
+    private static double mergeableFreqLevel = 0.05;
+
+    private static NumberFormat doubleFormat_2 = new DecimalFormat("#.##", new DecimalFormatSymbols(new Locale("en")));
 
     public static void main(String[] args) throws Exception {
 
         /* Init stuff */
         log("JData v0.4");
+        int mode = 42;
         double minFreq = 10;
         double maxFreq = 20;
 
+        /* Read config file */
+        Properties prop = new Properties();
+        try {
+            prop.load(new FileInputStream("jtool.properties"));
+            mode = (int) readDoubleProperty(prop, "mode");
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            err("Failed to load config: " + ex.getMessage());
+        }
+
+        /* 1=simple, 2=auto */
+        if (mode == 1) {
+            minFreq = readDoubleProperty(prop, "min.freq");
+            maxFreq = readDoubleProperty(prop, "max.freq");
+            log("Using fixed frequency range: " + minFreq + ", " + maxFreq);
+        } else {
+            log("Using auto-peak mode");
+        }
+
+        /* Output file */
         bufferedWriter = new BufferedWriter(new FileWriter(printFilename));
         PeakTool peakTool = new PeakTool(MIN_TICKS_START_PEAK, MAX_TICKS_END_PEAK);
 
         /* Read files */
         List<PeakRecord> globalPeaks = new ArrayList<PeakRecord>();
+        List<FileResultRecord> fileResults = new ArrayList<FileResultRecord>();
         File dataDir = new File(dataDirName);
         for (final File fileEntry : dataDir.listFiles()) {
             if (!fileEntry.isDirectory()) {
                 Datafile df = Datafile.loadData(fileEntry.getAbsolutePath());
-                List<PeakRecord> peaks = peakTool.findPeaks(df);
-                peaks = peakTool.mergeClosePeaks(peaks);
-                println(df.ev + " => " + peakTool.toString(peaks));
-                peakTool.totalizePeaks(peaks, globalPeaks);
-
+                if (mode == 1) {
+                    double power = peakTool.sumPower(df, minFreq, maxFreq);
+                    fileResults.add(new FileResultRecord(df.ev, power));
+                } else {
+                    List<PeakRecord> peaks = peakTool.findPeaks(df);
+                    peaks = peakTool.mergeClosePeaks(peaks);
+                    FileResultRecord fr = new FileResultRecord(df.ev, 0.0);
+                    fr.peaks = peaks;
+                    fileResults.add(fr);
+                    log(df.ev + " => " + peakTool.toString(peaks));
+                    peakTool.totalizePeaks(peaks, globalPeaks);
+                }
 
 //                err.println("Bad data dir: " + fileEntry.getAbsolutePath());
             }
         }
-        println(" TOTAL PEAKS: => " + peakTool.toString(globalPeaks));
+
+        /* Total output */
+        Collections.sort(fileResults);
+        if (mode == 1) {
+            for (FileResultRecord fr: fileResults) {
+                println(fr.ev + CSV_SEPARATOR + doubleFormat_2.format(fr.rangePower));
+            }
+        } else {
+            log(" TOTAL PEAKS: => " + peakTool.toString(globalPeaks));
+            StringBuilder sb = new StringBuilder();
+
+            /* Header */
+            sb.append("file\\peak").append(CSV_SEPARATOR);
+            for (PeakRecord globalPeak: globalPeaks) {
+                sb.append(doubleFormat_2.format(globalPeak.freq)).append(CSV_SEPARATOR);
+            }
+            println(sb.toString());
+
+            /* Rows */
+            for (FileResultRecord fr: fileResults) {
+                sb.setLength(0);
+                sb.append(fr.ev).append(CSV_SEPARATOR);
+                for (PeakRecord globalPeak: globalPeaks) {
+                    double peakFreq = globalPeak.freq;
+                    boolean found = false;
+                    if (fr.peaks != null) {
+                        for (PeakRecord pr: fr.peaks) {
+                            if (Math.abs(peakFreq - pr.freq)/peakFreq < mergeableFreqLevel) {
+                                sb.append(doubleFormat_2.format(pr.power)).append(CSV_SEPARATOR);
+                                found = true;
+                                break;
+                            }
+                        } // for peaks in result record
+                    }
+                    if (!found) {
+                        sb.append("0.0").append(CSV_SEPARATOR);
+                    }
+                } // for global peaks
+                println(sb.toString());
+            }
+        }
+
+
         bufferedWriter.close();
     }
 
@@ -98,5 +175,17 @@ public class JDataMain {
     }
 
 
+    public static double readDoubleProperty(Properties properties, String key) {
+        String s = properties.getProperty(key);
+        if (s != null) {
+            try {
+                return Double.parseDouble(s);
+            } catch (NumberFormatException ex) {
+                err("Bad double: [" + s + "] for key " + key);
+                // ignore
+            }
+        }
+        return 0.0;
+    }
 
 }

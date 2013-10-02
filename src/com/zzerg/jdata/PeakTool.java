@@ -120,6 +120,25 @@ public class PeakTool {
         Collections.sort(totalPeaksList);
     }
 
+    public double sumPower(Datafile df, double minFreq, double maxFreq) {
+        JDataMain.log("Sum power for: " + df.name);
+        double prevFreq = df.freqs[0];
+        double curFreq;
+        double peakPower = 0.0;
+
+        for (int i = 1; i < df.length; i++) {
+            curFreq = df.freqs[i];
+            /* Inside peak */
+            if (curFreq >= minFreq && curFreq < maxFreq) {
+                peakPower += (curFreq - prevFreq) * df.tics[i];
+            }
+            prevFreq = curFreq;
+        } // for freq
+
+        return peakPower;
+    }
+
+
     public int getMinValueStartPeak() {
         return minValueStartPeak;
     }
