@@ -20,10 +20,11 @@ public class JDataMain {
     private static String printFilename = "result.csv";
     private static BufferedWriter bufferedWriter = null;
 
-    private static final int MIN_TICKS_START_PEAK = 5;
-    private static final int MAX_TICKS_END_PEAK = 3;
-    private static final int MIN_PEAK_POWER = 10;
-    private static final String CSV_SEPARATOR = ";";
+    private static int peakStartValue = 5;
+    private static int peakEndValue = 3;
+    private static double minPeakPower = 10;
+    private static String csvSeparator = ";";
+    private static String floatSeparator = ".";
 
     private static double mergeableFreqLevel = 0.05;
 
@@ -32,10 +33,10 @@ public class JDataMain {
     public static void main(String[] args) throws Exception {
 
         /* Init stuff */
-        log("JData v0.4");
+        log("JData v0.5");
         int mode = 42;
-        double minFreq = 10;
-        double maxFreq = 20;
+        double minFreq = 10.0;
+        double maxFreq = 20.0;
 
         /* Read config file */
         Properties prop = new Properties();
@@ -47,6 +48,7 @@ public class JDataMain {
             err("Failed to load config: " + ex.getMessage());
         }
 
+        /* read config */
         /* 1=simple, 2=auto */
         if (mode == 1) {
             minFreq = readDoubleProperty(prop, "min.freq");
@@ -54,11 +56,18 @@ public class JDataMain {
             log("Using fixed frequency range: " + minFreq + ", " + maxFreq);
         } else {
             log("Using auto-peak mode");
+            mergeableFreqLevel = readDoubleProperty(prop, "merge.freq.level");
+            minPeakPower = readDoubleProperty(prop, "min.peak.power");
+            peakStartValue = (int) readDoubleProperty(prop, "peak.start.value");
+            peakEndValue = (int) readDoubleProperty(prop, "peak.end.value");
+
         }
+        csvSeparator = prop.getProperty("csv.separator");
+        floatSeparator = prop.getProperty("float.separator");
 
         /* Output file */
         bufferedWriter = new BufferedWriter(new FileWriter(printFilename));
-        PeakTool peakTool = new PeakTool(MIN_TICKS_START_PEAK, MAX_TICKS_END_PEAK);
+        PeakTool peakTool = new PeakTool(peakStartValue, peakEndValue, mergeableFreqLevel, minPeakPower);
 
         /* Read files */
         List<PeakRecord> globalPeaks = new ArrayList<PeakRecord>();
@@ -79,7 +88,6 @@ public class JDataMain {
                     log(df.ev + " => " + peakTool.toString(peaks));
                     peakTool.totalizePeaks(peaks, globalPeaks);
                 }
-
 //                err.println("Bad data dir: " + fileEntry.getAbsolutePath());
             }
         }
@@ -88,37 +96,37 @@ public class JDataMain {
         Collections.sort(fileResults);
         if (mode == 1) {
             for (FileResultRecord fr: fileResults) {
-                println(fr.ev + CSV_SEPARATOR + doubleFormat_2.format(fr.rangePower));
+                println(fr.ev + csvSeparator + doubleFormat_2.format(fr.rangePower));
             }
         } else {
             log(" TOTAL PEAKS: => " + peakTool.toString(globalPeaks));
             StringBuilder sb = new StringBuilder();
 
             /* Header */
-            sb.append("file\\peak").append(CSV_SEPARATOR);
+            sb.append("file\\peak").append(csvSeparator);
             for (PeakRecord globalPeak: globalPeaks) {
-                sb.append(doubleFormat_2.format(globalPeak.freq)).append(CSV_SEPARATOR);
+                sb.append(doubleFormat_2.format(globalPeak.freq)).append(csvSeparator);
             }
             println(sb.toString());
 
             /* Rows */
             for (FileResultRecord fr: fileResults) {
                 sb.setLength(0);
-                sb.append(fr.ev).append(CSV_SEPARATOR);
+                sb.append(fr.ev).append(csvSeparator);
                 for (PeakRecord globalPeak: globalPeaks) {
                     double peakFreq = globalPeak.freq;
                     boolean found = false;
                     if (fr.peaks != null) {
                         for (PeakRecord pr: fr.peaks) {
                             if (Math.abs(peakFreq - pr.freq)/peakFreq < mergeableFreqLevel) {
-                                sb.append(doubleFormat_2.format(pr.power)).append(CSV_SEPARATOR);
+                                sb.append(doubleFormat_2.format(pr.power)).append(csvSeparator);
                                 found = true;
                                 break;
                             }
                         } // for peaks in result record
                     }
                     if (!found) {
-                        sb.append("0.0").append(CSV_SEPARATOR);
+                        sb.append("0.0").append(csvSeparator);
                     }
                 } // for global peaks
                 println(sb.toString());

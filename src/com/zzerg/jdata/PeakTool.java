@@ -1,7 +1,6 @@
 package com.zzerg.jdata;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
@@ -14,12 +13,15 @@ public class PeakTool {
 
     private int minValueStartPeak;
     private int maxValueEndPeak;
-    private double mergeableFreqLevel = 0.05;
+    private double mergeableFreqLevel;
+    private double minPeakPower;
 
 
-    public PeakTool(int min, int max) {
+    public PeakTool(int min, int max, double mergeableFreqLevel, double minPeakPower) {
         minValueStartPeak = min;
         maxValueEndPeak = max;
+        this.minPeakPower = minPeakPower;
+        this.mergeableFreqLevel = mergeableFreqLevel;
     }
 
     public List<PeakRecord> findPeaks(Datafile df) {
@@ -42,8 +44,8 @@ public class PeakTool {
                 /* End peak */
                 // TODO: weighted peak center calculation!
                 PeakRecord pr = new PeakRecord(0.5 * (startPeakFreq + curFreq), peakPower);
-                peakList.add(pr);
-                if (peakPower > 10) {
+                if (peakPower > minPeakPower) {
+                    peakList.add(pr);
                     JDataMain.log("Peak detected around: " + pr.freq + ", power: " + peakPower);
                 }
                 startPeakFreq = -1.0;
@@ -138,20 +140,4 @@ public class PeakTool {
         return peakPower;
     }
 
-
-    public int getMinValueStartPeak() {
-        return minValueStartPeak;
-    }
-
-    public void setMinValueStartPeak(int minValueStartPeak) {
-        this.minValueStartPeak = minValueStartPeak;
-    }
-
-    public int getMaxValueEndPeak() {
-        return maxValueEndPeak;
-    }
-
-    public void setMaxValueEndPeak(int maxValueEndPeak) {
-        this.maxValueEndPeak = maxValueEndPeak;
-    }
 }
